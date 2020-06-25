@@ -6,6 +6,8 @@ import org.kornea.toolkit.common.SharedState
 import org.kornea.toolkit.common.SharedStateRW
 import org.kornea.toolkit.common.freeze
 import kotlin.contracts.ExperimentalContracts
+import kotlin.math.max
+import kotlin.math.min
 
 @DslMarker
 @Target(AnnotationTarget.CLASS)
@@ -38,20 +40,26 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
         var previous: TextBufferSegment?
     }
 
-    class LoneSegment(backing: SharedState<String, StringBuilder>, style: CssStyle): TextBufferSegment(backing, style) {
+    class LoneSegment(backing: SharedState<String, StringBuilder>, style: CssStyle) : TextBufferSegment(backing, style) {
         constructor(builder: StringBuilder, style: CssStyle) : this(SharedState.of(builder), style)
         constructor(string: String, style: CssStyle) : this(SharedState.of(StringBuilder(string)), style)
         constructor(style: CssStyle) : this(SharedState.of(StringBuilder()), style)
 
         override fun detach() {}
 
-        override fun withPrevious(previous: TextBufferSegment): Pair<TailSegment, HeadSegment> {
-            val head = HeadSegment(previous.backing, previous.segmentStyle, null)
+        override fun withPrevious(previous: TextBufferSegment): Pair<TailSegment, TextBufferSegment> {
+            val head =
+                if (previous is HasPrevious) BodySegment(previous.backing, previous.segmentStyle, previous = previous.previous, next = null)
+                else HeadSegment(previous.backing, previous.segmentStyle, null)
+
             return TailSegment(backing, segmentStyle, previous = head) to head
         }
 
         override fun withNext(next: TextBufferSegment): Pair<HeadSegment, TextBufferSegment> {
-            val tail = TailSegment(next.backing, next.segmentStyle, null)
+            val tail =
+                if (next is HasNext) BodySegment(next.backing, next.segmentStyle, previous = null, next = next.next)
+                else TailSegment(next.backing, next.segmentStyle, null)
+
             return HeadSegment(backing, segmentStyle, next = tail) to tail
         }
     }
@@ -68,8 +76,11 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
             next = null
         }
 
-        override fun withPrevious(previous: TextBufferSegment): Pair<BodySegment, HeadSegment> {
-            val head = HeadSegment(previous.backing, previous.segmentStyle, null)
+        override fun withPrevious(previous: TextBufferSegment): Pair<BodySegment, TextBufferSegment> {
+            val head =
+                if (previous is HasPrevious) BodySegment(previous.backing, previous.segmentStyle, previous = previous.previous, next = null)
+                else HeadSegment(previous.backing, previous.segmentStyle, null)
+
             return BodySegment(backing, segmentStyle, previous = head, next = next) to head
         }
 
@@ -79,9 +90,9 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
         }
 
         init {
-            if (next != null) {
-                (next as HasPrevious).previous = this
-            }
+//            if (next != null) {
+//                (next as HasPrevious).previous = this
+//            }
         }
     }
 
@@ -113,25 +124,25 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
         }
 
         init {
-            if (previous is HasNext) {
-                val prevAsNext = previous as HasNext
-
-                if (prevAsNext.next != null && next == null) {
-                    next = prevAsNext.next
-                }
-
-                prevAsNext.next = this
-            }
-
-            if (next != null) {
-                val nextAsPrev = next as HasPrevious
-
-                if (nextAsPrev.previous != null && previous == null) {
-                    previous = nextAsPrev.previous
-                }
-
-                nextAsPrev.previous = this
-            }
+//            if (previous is HasNext) {
+//                val prevAsNext = previous as HasNext
+//
+//                if (prevAsNext.next != null && next == null) {
+//                    next = prevAsNext.next
+//                }
+//
+//                prevAsNext.next = this
+//            }
+//
+//            if (next != null) {
+//                val nextAsPrev = next as HasPrevious
+//
+//                if (nextAsPrev.previous != null && previous == null) {
+//                    previous = nextAsPrev.previous
+//                }
+//
+//                nextAsPrev.previous = this
+//            }
         }
     }
 
@@ -152,15 +163,18 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
             return this to previous
         }
 
-        override fun withNext(next: TextBufferSegment): Pair<BodySegment, TailSegment> {
-            val tail = TailSegment(next.backing, next.segmentStyle, null)
+        override fun withNext(next: TextBufferSegment): Pair<BodySegment, TextBufferSegment> {
+            val tail =
+                if (next is HasNext) BodySegment(next.backing, next.segmentStyle, previous = null, next = next.next)
+                else TailSegment(next.backing, next.segmentStyle, null)
+
             return BodySegment(backing, segmentStyle, previous = previous, next = tail) to tail
         }
 
         init {
-            if (previous is HasNext) {
-                (previous as HasNext).next = this
-            }
+//            if (previous is HasNext) {
+//                (previous as HasNext).next = this
+//            }
         }
     }
 
@@ -199,48 +213,87 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
     override fun iterator(): Iterator<TextBufferSegment> = SegmentIterator(this)
 }
 
+inline fun TextBufferSegment.couplePrevious(previous: TextBufferSegment?): TextBufferSegment {
+    if (previous == null) return this
+
+    val (s, p) = withPrevious(previous)
+    return p.withNext(s).second
+}
+
+inline fun TextBufferSegment.coupleNext(next: TextBufferSegment?): TextBufferSegment {
+    if (next == null) return this
+
+    val (s, n) = withNext(next)
+    return n.withPrevious(s).second
+}
+
 inline fun TextBufferSegment.first(): TextBufferSegment {
     var node = (this as? TextBufferSegment.HasPrevious)?.previous ?: return this
 
-    while (node is TextBufferSegment.HasPrevious) {
-        node = node.previous ?: return node
+    while (true) {
+        node = (node as? TextBufferSegment.HasPrevious)?.previous ?: return node
     }
-
-    return node
 }
 
 inline fun TextBufferSegment.last(): TextBufferSegment {
     var node = (this as? TextBufferSegment.HasNext)?.next ?: return this
 
-    while (node is TextBufferSegment.HasNext) {
-        node = node.next ?: return node
+    while (true) {
+        node = (node as? TextBufferSegment.HasNext)?.next ?: return node
     }
+}
 
-    return node
+inline fun TextBufferSegment.previousUntil(predicate: (TextBufferSegment) -> Boolean): TextBufferSegment {
+    var node = (this as? TextBufferSegment.HasPrevious)?.previous ?: throw IllegalArgumentException("TextBufferSegment has no previous element")
+
+    while (true) {
+        if (predicate(node)) return node
+        node = (node as? TextBufferSegment.HasPrevious)?.previous ?: throw IllegalArgumentException("TextBufferSegment has no previous element")
+    }
+}
+
+suspend inline fun TextBufferSegment.previousUntilWithPosition(pos: Int, predicate: (TextBufferSegment, pos: Int) -> Boolean): TextBufferSegment {
+    var node = (this as? TextBufferSegment.HasPrevious)?.previous ?: throw IllegalArgumentException("TextBufferSegment has no previous element")
+    var pos = pos - this.length()
+
+    while (true) {
+        if (predicate(node, pos)) return node
+
+        pos -= node.length()
+        node = (node as? TextBufferSegment.HasPrevious)?.previous ?: throw IllegalArgumentException("TextBufferSegment has no previous element")
+    }
+}
+
+suspend inline fun TextBufferSegment.nextUntilWithPosition(pos: Int, predicate: (TextBufferSegment, pos: Int) -> Boolean): TextBufferSegment {
+    var node = (this as? TextBufferSegment.HasNext)?.next ?: throw IllegalArgumentException("TextBufferSegment has no next element")
+    var pos = pos + this.length()
+
+    while (true) {
+        if (predicate(node, pos)) return node
+
+        pos += node.length()
+        node = (node as? TextBufferSegment.HasNext)?.next ?: throw IllegalArgumentException("TextBufferSegment has no next element")
+    }
 }
 
 suspend inline fun TextBufferSegment.startingPosition(): Int {
     var node = (this as? TextBufferSegment.HasPrevious)?.previous ?: return 0
     var pos = 0
 
-    do {
+    while (true) {
         pos += node.length()
         node = (node as? TextBufferSegment.HasPrevious)?.previous ?: return pos
-    } while (node is TextBufferSegment.HasPrevious)
-
-    return pos
+    }
 }
 
 suspend inline fun TextBufferSegment.endingPosition(): Int {
     var node = (this as? TextBufferSegment.HasPrevious)?.previous ?: return length()
     var pos = 0
 
-    do {
+    while (true) {
         pos += node.length()
         node = (node as? TextBufferSegment.HasPrevious)?.previous ?: return pos + length()
-    } while (node is TextBufferSegment.HasPrevious)
-
-    return pos + length()
+    }
 }
 
 suspend inline fun TextBufferSegment.seekInLine(column: Int): TextBufferSegment? {
@@ -265,13 +318,19 @@ suspend inline fun TextBufferSegment.lineToString(): String =
 suspend inline fun TextBufferSegment.contains(column: Int): Boolean = contains(startingPosition(), column)
 suspend inline fun TextBufferSegment.contains(start: Int, column: Int): Boolean = column >= start && column < start + length()
 
-suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegment): TextBufferSegment = scoped { self ->
+suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegment, underflow: Boolean = false, overflow: Boolean = false): TextBufferSegment = scoped { self ->
     val wasDirty = self.dirty
     var new = new
 
-    val start = self.startingPosition()
-
     val segLen = new.length()
+    val selfLen = self.length()
+
+    val start = self.startingPosition()
+    val end = start + selfLen
+
+    if (position < start && !overflow) return@scoped self.previousUntilWithPosition(start) { seg, segStart -> seg.contains(segStart, position) }.insertSegment(position, new)
+    if (position > end && !underflow) return@scoped self.nextUntilWithPosition(start) { seg, segStart -> seg.contains(segStart, position) }.insertSegment(position, new)
+
     val segPrefixLen = position - start
     val segSuffixLen = self.length() - (segPrefixLen + segLen)
 
@@ -288,7 +347,7 @@ suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegmen
         val prefix = self.backing.accessState { str -> str.substring(0, segPrefixLen) }
 
         //Create a new segment with the old style and prefix
-        prefixSegment = TextBufferSegment.BodySegment(prefix, self.segmentStyle, previous = (self as? TextBufferSegment.HasPrevious)?.previous, next = null)
+        prefixSegment = TextBufferSegment.BodySegment(prefix, self.segmentStyle, null, null).couplePrevious((self as? TextBufferSegment.HasPrevious)?.previous)
 //            .apply {
 //                if (self.documentPosition != null) {
 //                    this.documentPosition = self.documentPosition
@@ -309,7 +368,7 @@ suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegmen
         val suffix = self.backing.accessState { str -> str.substring(str.length - segSuffixLen, str.length) }
 
         //Create a new segment with the old style and suffix
-        suffixSegment = TextBufferSegment.BodySegment(suffix, self.segmentStyle, previous = null, next = (self as? TextBufferSegment.HasNext)?.next)
+        suffixSegment = TextBufferSegment.BodySegment(suffix, self.segmentStyle, null, null).coupleNext((self as? TextBufferSegment.HasNext)?.next)
 //            .apply {
 //                if (self.documentPosition != null) {
 //                    this.documentPosition = self.documentPosition!! + self.documentLength!! - suffix.length
@@ -330,7 +389,7 @@ suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegmen
                 suffixSegment = null
             } else {
                 //Damnit, okay so we basically need to do this whole thing again but for the next segment. Recursion ahoy!
-                new = overflow.insertSegment(position, new)
+                new = overflow.insertSegment(position, new, overflow = true)
 
                 //If we've overflowed, then the next section will be set here, and it'll also be *our* next section
                 //The overflow should have handled this, so we just set suffixSegment here to null
