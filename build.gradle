@@ -1,0 +1,4 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '1.4-M2' apply false
+    id 'org.openjfx.javafxplugin' version '0.0.8' apply false
+}

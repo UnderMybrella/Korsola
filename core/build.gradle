@@ -1,0 +1,31 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+    id 'org.openjfx.javafxplugin'
+}
+
+group 'dev.brella'
+version '1.0.0-alpha'
+
+repositories {
+    maven { url "https://maven.abimon.org" }
+    maven { url 'https://dl.bintray.com/kotlin/kotlin-eap' }
+    maven { url 'https://kotlin.bintray.com/kotlinx' }
+    mavenCentral()
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib"
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.7-1.4-M2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-javafx:1.3.7-1.4-M2'
+
+    implementation "org.fxmisc.richtext:richtextfx:0.10.5"
+
+    implementation "org.abimon:kornea-errors:3.4.1"
+    implementation "org.abimon:kornea-io:4.1.2"
+}
+
+javafx {
+    version = '11'
+    modules = ['javafx.base', 'javafx.controls', 'javafx.graphics']
+    configuration = 'api'
+}
