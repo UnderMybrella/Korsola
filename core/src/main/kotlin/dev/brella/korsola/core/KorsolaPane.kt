@@ -28,31 +28,5 @@ class KorsolaPane(inputLocation: InputLocation = InputLocation.BOTTOM) : BorderP
         }
 
         center = outputLines
-
-//        arrayOf("Hewwo", "World!").forEach { str ->
-//            val line = TextFlow()
-//            outputLines.children.add(line)
-//
-//            val text = Text(str)
-//            text.styleClass.add("text")
-//            line.children.add(text)
-//        }
-
-        GlobalScope.launch(Dispatchers.JavaFx) {
-            repeat(4) { i ->
-                val segment = TextBufferSegment.HeadSegment("[$i] Hello, World! ", CssStyle.EMPTY, null)
-                outputLines.children.add(segment.flow)
-
-                delay(2_000)
-
-                segment.appendToChain(TextBufferSegment.BodySegment("This is a test!", CssStyle.EMPTY))
-                    .apply { delay(2_000) }
-                    .appendToChain(TextBufferSegment.BodySegment(" >:(", CssStyle.EMPTY))
-
-                println(segment.lineToString())
-                val newSegment = segment.insertSegment(23, TextBufferSegment.BodySegment("uwu_owo_", CssStyle.EMPTY))
-//            val head = (newSegment.head() as TextBufferSegment.HeadSegment)
-            }
-        }
     }
 }

@@ -3,6 +3,9 @@ package dev.brella.korsola.core
 import dev.brella.korsola.core.css.CssStyle
 import javafx.scene.text.Text
 import javafx.scene.text.TextFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.javafx.JavaFx
+import kotlinx.coroutines.withContext
 import org.kornea.toolkit.common.SharedState
 import org.kornea.toolkit.common.freeze
 import kotlin.contracts.ExperimentalContracts
@@ -36,21 +39,15 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
         textAttr.text = string
     }
 
-    val textAttr: Text = Text().apply { styleClass.add("text") }
-
-    //    interface HasNext {
-    abstract var next: TextBufferSegment?
-
-    //        abstract fun withNext(next: TextBufferSegment): Pair<TextBufferSegment, TextBufferSegment>
-    abstract fun appendToChain(segment: BodySegment): BodySegment
-//    }
-
     interface HasPrevious {
         var previous: TextBufferSegment?
 
         //        abstract fun withPrevious(previous: TextBufferSegment): Pair<TextBufferSegment, TextBufferSegment>
         fun prependToChain(segment: BodySegment): BodySegment
     }
+
+    val textAttr: Text = Text().apply { styleClass.add("text") }
+    abstract var next: TextBufferSegment?
 
     class HeadSegment(backing: SharedState<String, StringBuilder>, style: CssStyle, override var next: TextBufferSegment?) : TextBufferSegment(backing, style) {
         constructor(builder: StringBuilder, style: CssStyle, next: TextBufferSegment?) : this(SharedState.of(builder), style, next) {
@@ -354,33 +351,18 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
 //            }
         }
     }
-
-    var dirty: Boolean = true
-
-//    var documentPosition: Int? = null
-//    var documentLength: Int? = null
-
-//    override fun toString(): String = "BufferSegment(text=$builder,style=$style,previous=[${previous?.builder}],next=[${next?.builder}])"
-
     abstract fun removeFromChain()
     abstract fun <T : TextBufferSegment> replaceInChain(segment: T): T
 
-    suspend inline fun length(): Int = backing.accessState { str -> str.length }
-    suspend inline fun <T> withBuilder(crossinline block: suspend (StringBuilder) -> T): T? {
-        var result: T? = null
-        backing.mutateState { builder ->
-            dirty = true
-            result = block(builder)
-            if (result === builder) result = null
-            builder
-        }
+    abstract fun appendToChain(segment: BodySegment): BodySegment
 
-        return result
-    }
+    suspend fun text(): String = backing.accessState { it }
 
-    suspend inline fun cleanString(): String = backing.accessState { str ->
-        dirty = false
-        str
+    suspend inline fun length(): Int = backing.accessState { it.length }
+    suspend inline fun withBuilder(noinline block: suspend (StringBuilder) -> StringBuilder) {
+        backing.mutateState(block)
+
+        withContext(Dispatchers.JavaFx) { textAttr.text = text() }
     }
 
     inline fun <T> scoped(block: TextBufferSegmentScope.EXPLICIT.(self: TextBufferSegment) -> T): T =
@@ -480,7 +462,7 @@ suspend inline fun TextBufferSegment.lineLength(): Long =
     head().fold(0L) { len, segment: TextBufferSegment -> len + segment.length() }
 
 suspend inline fun TextBufferSegment.lineToString(): String =
-    head().fold(StringBuilder()) { builder, segment: TextBufferSegment -> segment.backing.accessState { str -> builder.append(str) } }
+    head().fold(StringBuilder()) { builder, segment: TextBufferSegment -> builder.append(segment.text()) }
         .toString()
 
 //inline operator fun TextBufferSegment.contains(cursor: ConsoleCursor): Boolean {
@@ -526,7 +508,7 @@ suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegmen
     } else if (segPrefixLen > 0) {
         //Uho, there's a prefix here
         //It's cool though, we just need a substring
-        val prefix = self.backing.accessState { str -> str.substring(0, segPrefixLen) }
+        val prefix = self.text().substring(0, segPrefixLen)
 
         //Create a new segment with the old style and prefix
         val prev = (self as? TextBufferSegment.HasPrevious)?.previous
@@ -554,7 +536,7 @@ suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegmen
 //        self.next = null
     } else if (segSuffixLen > 0) {
         //We have a suffix, n.b.d
-        val suffix = self.backing.accessState { str -> str.substring(str.length - segSuffixLen, str.length) }
+        val suffix = self.text().let { str -> str.substring(str.length - segSuffixLen, str.length) }
 
         //Create a new segment with the old style and suffix
         suffixSegment = TextBufferSegment.BodySegment(suffix, self.segmentStyle, null, self.next)
