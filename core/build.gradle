@@ -11,7 +11,7 @@ sourceCompatibility = 11
 compileKotlin {
     kotlinOptions {
         jvmTarget = "11"
-        freeCompilerArgs = ["-XXLanguage:+InlineClasses", "-Xopt-in=kotlin.RequiresOptIn"]
+        freeCompilerArgs = ["-XXLanguage:+InlineClasses", "-Xopt-in=kotlin.RequiresOptIn", "-Xopt-in=kotlin.contracts.ExperimentalContracts"]
     }
 }
 
