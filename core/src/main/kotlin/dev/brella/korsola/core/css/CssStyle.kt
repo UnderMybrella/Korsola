@@ -7,12 +7,12 @@ import javafx.scene.Parent
 import javafx.scene.Scene
 
 data class CssStyle(val inlineStyle: CssBuilder<*>?, val styleClassStates: Map<String, Boolean>, val pseudoClassStates: Map<String, Boolean>) {
-//    companion object {
-//        val EMPTY = CssStyle(null, emptySet(), emptySet(), emptyMap())
-//
+    companion object {
+        val EMPTY = CssStyle(null, emptyMap(), emptyMap())
+
 //        val SLOW_BLINK_ENABLED = CssStyle(null, emptySet(), emptySet(), mapOf(AnsiParser.SLOW_BLINK_KEY to true))
 //        val SLOW_BLINK_DISABLED = CssStyle(null, emptySet(), emptySet(), mapOf(AnsiParser.SLOW_BLINK_KEY to false))
-//    }
+    }
 
     @CssDsl
     class Builder {

@@ -38,6 +38,24 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
         var previous: TextBufferSegment?
     }
 
+    class LoneSegment(backing: SharedState<String, StringBuilder>, style: CssStyle): TextBufferSegment(backing, style) {
+        constructor(builder: StringBuilder, style: CssStyle) : this(SharedState.of(builder), style)
+        constructor(string: String, style: CssStyle) : this(SharedState.of(StringBuilder(string)), style)
+        constructor(style: CssStyle) : this(SharedState.of(StringBuilder()), style)
+
+        override fun detach() {}
+
+        override fun withPrevious(previous: TextBufferSegment): Pair<TailSegment, HeadSegment> {
+            val head = HeadSegment(previous.backing, previous.segmentStyle, null)
+            return TailSegment(backing, segmentStyle, previous = head) to head
+        }
+
+        override fun withNext(next: TextBufferSegment): Pair<HeadSegment, TextBufferSegment> {
+            val tail = TailSegment(next.backing, next.segmentStyle, null)
+            return HeadSegment(backing, segmentStyle, next = tail) to tail
+        }
+    }
+
     class HeadSegment(backing: SharedState<String, StringBuilder>, style: CssStyle, override var next: TextBufferSegment?) : TextBufferSegment(backing, style), HasNext {
         constructor(builder: StringBuilder, style: CssStyle, next: TextBufferSegment?) : this(SharedState.of(builder), style, next)
         constructor(string: String, style: CssStyle, next: TextBufferSegment?) : this(SharedState.of(StringBuilder(string)), style, next)
@@ -51,7 +69,7 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
         }
 
         override fun withPrevious(previous: TextBufferSegment): Pair<BodySegment, HeadSegment> {
-            val head = HeadSegment(previous.backing, previous.segmentStyle, this)
+            val head = HeadSegment(previous.backing, previous.segmentStyle, null)
             return BodySegment(backing, segmentStyle, previous = head, next = next) to head
         }
 
@@ -67,10 +85,10 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
         }
     }
 
-    class BodySegment(backing: SharedState<String, StringBuilder>, style: CssStyle, override var next: TextBufferSegment?, override var previous: TextBufferSegment?) : TextBufferSegment(backing, style), HasNext, HasPrevious {
-        constructor(builder: StringBuilder, style: CssStyle, next: TextBufferSegment?, previous: TextBufferSegment?) : this(SharedState.of(builder), style, next, previous)
-        constructor(string: String, style: CssStyle, next: TextBufferSegment?, previous: TextBufferSegment?) : this(SharedState.of(StringBuilder(string)), style, next, previous)
-        constructor(style: CssStyle, next: TextBufferSegment?, previous: TextBufferSegment?) : this(SharedState.of(StringBuilder()), style, next, previous)
+    class BodySegment(backing: SharedState<String, StringBuilder>, style: CssStyle, override var previous: TextBufferSegment?, override var next: TextBufferSegment?) : TextBufferSegment(backing, style), HasNext, HasPrevious {
+        constructor(builder: StringBuilder, style: CssStyle, previous: TextBufferSegment?, next: TextBufferSegment?) : this(SharedState.of(builder), style, previous, next)
+        constructor(string: String, style: CssStyle, previous: TextBufferSegment?, next: TextBufferSegment?) : this(SharedState.of(StringBuilder(string)), style, previous, next)
+        constructor(style: CssStyle, previous: TextBufferSegment?, next: TextBufferSegment?) : this(SharedState.of(StringBuilder()), style, previous, next)
 
         override fun detach() {
             if ((previous as? HasNext)?.next === this)
@@ -135,8 +153,8 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
         }
 
         override fun withNext(next: TextBufferSegment): Pair<BodySegment, TailSegment> {
-            val tail = TailSegment(next.backing, next.segmentStyle, this)
-            return BodySegment(backing, segmentStyle, previous, tail) to tail
+            val tail = TailSegment(next.backing, next.segmentStyle, null)
+            return BodySegment(backing, segmentStyle, previous = previous, next = tail) to tail
         }
 
         init {
@@ -205,10 +223,10 @@ suspend inline fun TextBufferSegment.startingPosition(): Int {
     var node = (this as? TextBufferSegment.HasPrevious)?.previous ?: return 0
     var pos = 0
 
-    while (node is TextBufferSegment.HasPrevious) {
+    do {
         pos += node.length()
-        node = node.previous ?: return pos
-    }
+        node = (node as? TextBufferSegment.HasPrevious)?.previous ?: return pos
+    } while (node is TextBufferSegment.HasPrevious)
 
     return pos
 }
@@ -217,10 +235,10 @@ suspend inline fun TextBufferSegment.endingPosition(): Int {
     var node = (this as? TextBufferSegment.HasPrevious)?.previous ?: return length()
     var pos = 0
 
-    while (node is TextBufferSegment.HasPrevious) {
+    do {
         pos += node.length()
-        node = node.previous ?: return pos + length()
-    }
+        node = (node as? TextBufferSegment.HasPrevious)?.previous ?: return pos + length()
+    } while (node is TextBufferSegment.HasPrevious)
 
     return pos + length()
 }
@@ -233,6 +251,10 @@ suspend inline fun TextBufferSegment.seekInLine(column: Int): TextBufferSegment?
 
 suspend inline fun TextBufferSegment.lineLength(): Long =
     first().fold(0L) { len, segment: TextBufferSegment -> len + segment.length() }
+
+suspend inline fun TextBufferSegment.lineToString(): String =
+    first().fold(StringBuilder()) { builder, segment: TextBufferSegment -> segment.backing.accessState { str -> builder.append(str) } }
+        .toString()
 
 //inline operator fun TextBufferSegment.contains(cursor: ConsoleCursor): Boolean {
 //    val start = startingPosition()
@@ -263,17 +285,10 @@ suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegmen
     } else if (segPrefixLen > 0) {
         //Uho, there's a prefix here
         //It's cool though, we just need a substring
-        val prefix = self.withBuilder { builder ->
-            val str = builder.substring(0, segPrefixLen)
-            builder.delete(0, segPrefixLen)
-
-            str
-        }
-
-        requireNotNull(prefix)
+        val prefix = self.backing.accessState { str -> str.substring(0, segPrefixLen) }
 
         //Create a new segment with the old style and prefix
-        prefixSegment = TextBufferSegment.BodySegment(prefix, self.segmentStyle, (self as? TextBufferSegment.HasPrevious)?.previous, null)
+        prefixSegment = TextBufferSegment.BodySegment(prefix, self.segmentStyle, previous = (self as? TextBufferSegment.HasPrevious)?.previous, next = null)
 //            .apply {
 //                if (self.documentPosition != null) {
 //                    this.documentPosition = self.documentPosition
@@ -291,16 +306,10 @@ suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegmen
         suffixSegment = (self as? TextBufferSegment.HasNext)?.next
     } else if (segSuffixLen > 0) {
         //We have a suffix, n.b.d
-        val suffix = self.withBuilder { builder ->
-            val str = builder.substring(builder.length - segSuffixLen, builder.length)
-            builder.delete(builder.length - segSuffixLen, builder.length)
-            str
-        }
-
-        requireNotNull(suffix)
+        val suffix = self.backing.accessState { str -> str.substring(str.length - segSuffixLen, str.length) }
 
         //Create a new segment with the old style and suffix
-        suffixSegment = TextBufferSegment.BodySegment(suffix, self.segmentStyle, null, (self as? TextBufferSegment.HasNext)?.next)
+        suffixSegment = TextBufferSegment.BodySegment(suffix, self.segmentStyle, previous = null, next = (self as? TextBufferSegment.HasNext)?.next)
 //            .apply {
 //                if (self.documentPosition != null) {
 //                    this.documentPosition = self.documentPosition!! + self.documentLength!! - suffix.length
@@ -321,7 +330,7 @@ suspend fun TextBufferSegment.insertSegment(position: Int, new: TextBufferSegmen
                 suffixSegment = null
             } else {
                 //Damnit, okay so we basically need to do this whole thing again but for the next segment. Recursion ahoy!
-                overflow.insertSegment(position, new)
+                new = overflow.insertSegment(position, new)
 
                 //If we've overflowed, then the next section will be set here, and it'll also be *our* next section
                 //The overflow should have handled this, so we just set suffixSegment here to null
