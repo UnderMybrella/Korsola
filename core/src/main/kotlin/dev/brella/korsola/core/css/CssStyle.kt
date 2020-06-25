@@ -123,6 +123,7 @@ fun Node.addStylesheet(path: String = "autogen/${this.id}", from: CssStyle? = nu
 
     style.inlineStyle?.let { css ->
         KorsolaUrlStreamHandler.registerCSS(path, css.toCSS())
+
         if (this is Parent) stylesheets.add("${KorsolaUrlStreamHandler.PROTOCOL}:$path")
         else if (this is Scene) stylesheets.add("${KorsolaUrlStreamHandler.PROTOCOL}:$path")
         else null
@@ -146,31 +147,31 @@ fun <N : Node> styleNodeWith(node: N, css: CssStyle) {
     }
 }
 
-//inline fun CssStyle.Builder.styleColoursFromTheme(theme: AnsiScheme.Colours) = inlineCSS {
-//    anyElement { backgroundColour(theme.defaultBackgroundColour) }
-//
-//    textField {
-//        backgroundColour(theme.textInputBackgroundColour)
-//            .textFill(theme.textInputForegroundColour)
-//            .promptTextFill(theme.textInputPromptForegroundColour)
-//            .borderColour(theme.textInputBorderColour)
-//            .borderWidth(region(1, 0, 0, 0))
-//    }
-//
-//    textField("disabled") {
-//        backgroundColour(theme.textInputDisabledBackgroundColour)
-//            .textFill(theme.textInputDisabledForegroundColour)
-//            .promptTextFill(theme.textInputDisabledPromptForegroundColour)
-//            .borderColour(theme.textInputDisabledBorderColour)
-//    }
-//
-//    caretPath { stroke(theme.textInputCursorColour).opacity(theme.textInputCursorOpacity) }
-//
-//    text { fill(theme.defaultForegroundColour) }
-//
-//    val threeBitColours = theme.threeBitColours
-//    val brightThreeBitColours = theme.brightThreeBitColours
-//
+inline fun CssStyle.Builder.styleColoursFromTheme(theme: AnsiScheme.Colours) = inlineCSS {
+    anyElement { backgroundColour(theme.defaultBackgroundColour) }
+
+    textField {
+        backgroundColour(theme.textInputBackgroundColour)
+            .textFill(theme.textInputForegroundColour)
+            .promptTextFill(theme.textInputPromptForegroundColour)
+            .borderColour(theme.textInputBorderColour)
+            .borderWidth(region(1, 0, 0, 0))
+    }
+
+    textField("disabled") {
+        backgroundColour(theme.textInputDisabledBackgroundColour)
+            .textFill(theme.textInputDisabledForegroundColour)
+            .promptTextFill(theme.textInputDisabledPromptForegroundColour)
+            .borderColour(theme.textInputDisabledBorderColour)
+    }
+
+    caretPath { stroke(theme.textInputCursorColour).opacity(theme.textInputCursorOpacity) }
+
+    text { fill(theme.defaultForegroundColour) }
+
+    val threeBitColours = theme.threeBitColours
+    val brightThreeBitColours = theme.brightThreeBitColours
+
 //    repeat(8) { i ->
 //        text(AnsiParser.THREE_BIT_FOREGROUNDS[i]) {
 //            textFill(threeBitColours[i])
@@ -192,24 +193,24 @@ fun <N : Node> styleNodeWith(node: N, css: CssStyle) {
 //                .rtfxBackgroundColour(brightThreeBitColours[i])
 //        }
 //    }
-//}
-//
-//inline fun CssStyle.Builder.styleFontsFromTheme(theme: AnsiScheme.Fonts) = inlineCSS {
-//    fontFace(theme.defaultFontFamily, urls = theme.defaultFontUrls)
-//
-//    textField {
-//        fontSize(theme.defaultFontSize)
-//            .fontFamily(theme.defaultFontFamily)
-//    }
-//
-//    textField("disabled") {
-//        fontSize(theme.defaultFontSize)
-//            .fontFamily(theme.defaultFontFamily)
-//            .fontStyleItalic()
-//    }
-//
-//    text {
-//        fontSize(theme.defaultFontSize)
-//            .fontFamily(theme.defaultFontFamily)
-//    }
-//}
+}
+
+inline fun CssStyle.Builder.styleFontsFromTheme(theme: AnsiScheme.Fonts) = inlineCSS {
+    fontFace(theme.defaultFontFamily, urls = theme.defaultFontUrls)
+
+    textField {
+        fontSize(theme.defaultFontSize)
+            .fontFamily(theme.defaultFontFamily)
+    }
+
+    textField("disabled") {
+        fontSize(theme.defaultFontSize)
+            .fontFamily(theme.defaultFontFamily)
+            .fontStyleItalic()
+    }
+
+    text {
+        fontSize(theme.defaultFontSize)
+            .fontFamily(theme.defaultFontFamily)
+    }
+}
