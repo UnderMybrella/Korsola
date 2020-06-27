@@ -1,18 +1,17 @@
 package dev.brella.korsola.core
 
+import dev.brella.korsola.core.ansi.KorsolaAnsiParser
 import dev.brella.korsola.core.css.CssStyle
 import javafx.scene.control.TextField
+import javafx.scene.input.KeyEvent
 import javafx.scene.layout.BorderPane
 import javafx.scene.layout.VBox
 import javafx.scene.text.Text
 import javafx.scene.text.TextFlow
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.javafx.JavaFx
-import kotlinx.coroutines.launch
 
-class KorsolaPane(inputLocation: InputLocation = InputLocation.BOTTOM) : BorderPane() {
+class KorsolaPane(inputLocation: InputLocation = InputLocation.BOTTOM, defaultStyle: CssStyle, parser: KorsolaAnsiParser) : BorderPane() {
     enum class InputLocation {
         TOP,
         BOTTOM;
@@ -20,6 +19,13 @@ class KorsolaPane(inputLocation: InputLocation = InputLocation.BOTTOM) : BorderP
 
     val inputField = TextField()
     val outputLines = VBox()
+    val buffer = KorsolaBuffer(defaultStyle, parser, this::addNewLine)
+
+    suspend fun addNewLine(head: TextBufferSegment.HeadSegment) {
+        withContext(Dispatchers.JavaFx) {
+            outputLines.children.add(head.flow)
+        }
+    }
 
     init {
         when (inputLocation) {
@@ -28,5 +34,7 @@ class KorsolaPane(inputLocation: InputLocation = InputLocation.BOTTOM) : BorderP
         }
 
         center = outputLines
+
+//        addEventHandler(KeyEvent.KEY_RELEASED) { event -> println(event) }
     }
 }

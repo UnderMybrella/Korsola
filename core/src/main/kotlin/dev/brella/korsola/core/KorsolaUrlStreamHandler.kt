@@ -1,13 +1,13 @@
 package dev.brella.korsola.core
 
+import dev.brella.kornea.io.common.DataSource
+import dev.brella.kornea.io.jvm.FlowInputStream
 import dev.brella.korsola.core.css.CssBuilder
 import dev.brella.korsola.core.css.buildCSS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
-import org.abimon.kornea.io.common.DataSource
-import org.abimon.kornea.io.jvm.FlowInputStream
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.net.URL
@@ -72,6 +72,6 @@ class KorsolaUrlStreamHandler : URLStreamHandler(), CoroutineScope {
         override fun connect() {}
 
         @ExperimentalCoroutinesApi
-        override fun getInputStream(): InputStream = runBlocking { scope.FlowInputStream(source.openInputFlow().get(), true) }
+        override fun getInputStream(): InputStream = runBlocking { FlowInputStream(source.openInputFlow().get(), true) }
     }
 }

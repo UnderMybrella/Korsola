@@ -44,6 +44,11 @@ data class CssStyle(val inlineStyle: CssBuilder<*>?, val styleClassStates: Map<S
             return this
         }
 
+        inline fun styleClass(styleClass: String, state: Boolean): Builder {
+            styleClassStates[styleClass] = state
+            return this
+        }
+
         inline fun styleClasses(vararg styleClasses: String): Builder {
             styleClasses.forEach { styleClass -> styleClassStates[styleClass] = true }
             return this
@@ -54,12 +59,17 @@ data class CssStyle(val inlineStyle: CssBuilder<*>?, val styleClassStates: Map<S
             return this
         }
 
+        inline fun pseudoClass(pseudoClass: String, state: Boolean): Builder {
+            pseudoClassStates[pseudoClass] = state
+            return this
+        }
+
         inline fun pseudoClasses(vararg pseudoClasses: String): Builder {
             pseudoClasses.forEach { pseudo -> pseudoClassStates[pseudo] = true }
             return this
         }
 
-        fun disableAllPseudoClass(prefix: String) {
+        fun disableAllPseudoClasses(prefix: String) {
             pseudoClassStates.keys.forEach { key -> if (key.startsWith(prefix, true)) pseudoClassStates[key] = false }
         }
 

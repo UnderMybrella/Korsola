@@ -1,15 +1,15 @@
 package dev.brella.korsola.core
 
+import dev.brella.kornea.toolkit.common.SharedState
+import dev.brella.kornea.toolkit.common.freeze
 import dev.brella.korsola.core.css.CssStyle
 import javafx.scene.text.Text
 import javafx.scene.text.TextFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.javafx.JavaFx
 import kotlinx.coroutines.withContext
-import org.kornea.toolkit.common.SharedState
-import org.kornea.toolkit.common.freeze
+import org.abimon.kornea.io.common.AppendableAwait
 import kotlin.contracts.ExperimentalContracts
-import kotlin.contracts.contract
 
 @DslMarker
 @Target(AnnotationTarget.CLASS)
@@ -30,7 +30,7 @@ class SegmentIterator(var node: TextBufferSegment?) : Iterator<TextBufferSegment
 }
 
 @Suppress("EXPERIMENTAL_API_USAGE")
-sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> = SharedState.of(StringBuilder()), val segmentStyle: CssStyle) : Iterable<TextBufferSegment> {
+sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> = SharedState.of(StringBuilder()), val segmentStyle: CssStyle) : Iterable<TextBufferSegment>, AppendableAwait {
     constructor(builder: StringBuilder, segmentStyle: CssStyle) : this(SharedState.of(builder), segmentStyle) {
         textAttr.text = builder.toString()
     }
@@ -351,6 +351,7 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
 //            }
         }
     }
+
     abstract fun removeFromChain()
     abstract fun <T : TextBufferSegment> replaceInChain(segment: T): T
 
@@ -358,12 +359,23 @@ sealed class TextBufferSegment(val backing: SharedState<String, StringBuilder> =
 
     suspend fun text(): String = backing.accessState { it }
 
+    override suspend fun appendAwait(value: Char) = withBuilder { append(value) }
+    override suspend fun appendAwait(value: CharSequence?) = withBuilder { append(value) }
+    override suspend fun appendAwait(value: CharSequence?, startIndex: Int, endIndex: Int) = withBuilder { append(value) }
+
     suspend inline fun length(): Int = backing.accessState { it.length }
-    suspend inline fun withBuilder(noinline block: suspend (StringBuilder) -> StringBuilder) {
+    suspend inline fun withBuilder(flush: Boolean = true, noinline block: suspend StringBuilder.() -> StringBuilder): TextBufferSegment {
         backing.mutateState(block)
 
-        withContext(Dispatchers.JavaFx) { textAttr.text = text() }
+        if (flush) {
+            withContext(Dispatchers.JavaFx) { textAttr.text = text() }
+        }
+
+        return this
     }
+
+    suspend fun flush() =
+        withContext(Dispatchers.JavaFx) { textAttr.text = text() }
 
     inline fun <T> scoped(block: TextBufferSegmentScope.EXPLICIT.(self: TextBufferSegment) -> T): T =
         TextBufferSegmentScope.EXPLICIT.block(this)
